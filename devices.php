@@ -21,31 +21,70 @@ if (!isset($_SESSION['Admin-name'])) {
     <script src="js/dev_config.js"></script>
     
     <script>
-        $(window).on("load resize", function() {
-            var scrollWidth = $('.tbl-content').width() - $('.tbl-content table').width();
-            $('.tbl-header').css({'padding-right':scrollWidth});
-        }).resize();
-        
-        $(document).ready(function(){
-            function loadDevices() {
-                $.ajax({
-                    url: "dev_up.php",
-                    type: 'POST',
-                    data: { dev_up: 1 }
-                }).done(function(data) {
-                    $('#devices').html(data);
-                }).fail(function(jqXHR, textStatus) {
-                    $('.alert_dev').html('<div class="alert alert-danger">Failed to load devices: ' + textStatus + '</div>');
-                });
-            }
-            
-            // Initial load
-            loadDevices();
-            
-            // Refresh every 30 seconds
-            setInterval(loadDevices, 30000);
+$(document).ready(function(){
+    // Load devices function
+    function loadDevices() {
+        $.ajax({
+            url: "dev_up.php",
+            type: 'POST',
+            data: { dev_up: 1 }
+        }).done(function(data) {
+            $('#devices').html(data);
+        }).fail(function(jqXHR, textStatus) {
+            $('.alert_dev').html('<div class="alert alert-danger">Failed to load devices: ' + textStatus + '</div>');
         });
-    </script>
+    }
+
+    // Handle new device form submission
+    $('#deviceForm').submit(function(e) {
+        e.preventDefault();
+        
+        $.ajax({
+            url: "dev_up.php",
+            type: 'POST',
+            data: $(this).serialize(),
+            dataType: 'json'
+        }).done(function(response) {
+            if (response.status === 'success') {
+                $('#new-device').modal('hide');
+                $('.alert_dev').html('<div class="alert alert-success">' + response.message + '</div>');
+                loadDevices();
+                $('#deviceForm')[0].reset();
+            } else {
+                $('.alert_dev').html('<div class="alert alert-danger">' + response.message + '</div>');
+            }
+        }).fail(function(jqXHR, textStatus) {
+            $('.alert_dev').html('<div class="alert alert-danger">Failed to add device: ' + textStatus + '</div>');
+        });
+    });
+
+    // Initial load
+    loadDevices();
+    
+    // Refresh every 30 seconds
+    setInterval(loadDevices, 30000);
+    
+    // Handle delete device (delegated event)
+    $(document).on('click', '.delete-device', function() {
+        var deviceId = $(this).data('id');
+        if (confirm('Are you sure you want to delete this device?')) {
+            $.ajax({
+                url: "dev_delete.php",
+                type: 'POST',
+                data: { id: deviceId },
+                dataType: 'json'
+            }).done(function(response) {
+                if (response.status === 'success') {
+                    $('.alert_dev').html('<div class="alert alert-success">' + response.message + '</div>');
+                    loadDevices();
+                } else {
+                    $('.alert_dev').html('<div class="alert alert-danger">' + response.message + '</div>');
+                }
+            });
+        }
+    });
+});
+</script>
 </head>
 <body>
 <?php include 'header.php'; ?>
