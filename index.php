@@ -1,8 +1,16 @@
 <?php
+// No whitespace before this tag!
 session_start();
-if (!isset($_SESSION['Admin-name'])) {
-    header("Location: login.php");
-    exit();
+
+require 'connectDB.php';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Authentication logic
+    
+    if ($authenticated) {
+        header("Location: dashboard.php");
+        exit();
+    }
 }
 ?>
 <!DOCTYPE html>
