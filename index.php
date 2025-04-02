@@ -63,9 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
             
             <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 500px;">
+            <div class="table-responsive" style="max-height: 500px;">
                     <table class="table table-hover mb-0">
-                        <thead class="thead-dark">
+                        <thead class="bg-dark text-white">
                             <tr>
                                 <th>ID | Name</th>
                                 <th>Serial Number</th>
