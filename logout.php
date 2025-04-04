@@ -10,21 +10,21 @@ session_regenerate_id(true);
 // Unset all session variables
 $_SESSION = array();
 
-// Destroy the session cookie
+// Destroy the session
 if (ini_get("session.use_cookies")) {
     $params = session_get_cookie_params();
     setcookie(
-        session_name(),
-        '',
+        session_name(), 
+        '', 
         time() - 42000,
-        $params["path"],
+        $params["path"], 
         $params["domain"],
-        $params["secure"],
+        $params["secure"], 
         $params["httponly"]
     );
 }
 
-// Completely destroy the session
+// Finally, destroy the session
 session_destroy();
 
 // Clear any existing output buffers
@@ -32,6 +32,9 @@ while (ob_get_level()) {
     ob_end_clean();
 }
 
-// Redirect to login page with logout status
-header("Location: login.php?logout=success");
+// Redirect to login page with cache prevention headers
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+header("Location: login.php");
 exit();

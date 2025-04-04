@@ -1,206 +1,273 @@
 <?php
-session_start();
 require 'connectDB.php';
 
-// Redirect if not logged in
-if (!isset($_SESSION['Admin-name'])) {
-    header("Location: login.php");
-    exit();
-}
+// Add user Fingerprint
+if (isset($_POST['Add_fingerID'])) {
+    try {
+        $fingerid = (int)$_POST['fingerid'];
+        $dev_uid = (int)$_POST['dev_id'];
 
-// Handle user actions
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (isset($_POST['add_user'])) {
-        // Add new user logic
-        $username = trim($_POST['username']);
-        $serialnumber = trim($_POST['serialnumber']);
-        $gender = $_POST['gender'];
-        $department = $_POST['department'];
-        
-        try {
-            $sql = "INSERT INTO users (username, serialnumber, gender, device_dep, user_date) 
-                    VALUES (:username, :serialnumber, :gender, :department, CURRENT_DATE)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':serialnumber', $serialnumber);
-            $stmt->bindParam(':gender', $gender);
-            $stmt->bindParam(':department', $department);
-            $stmt->execute();
-            
-            $_SESSION['success'] = "User added successfully";
-        } catch (PDOException $e) {
-            $_SESSION['error'] = "Error adding user: " . $e->getMessage();
+        // Validate inputs
+        if ($fingerid == 0) {
+            throw new Exception("Enter a Fingerprint ID!");
         }
-    } elseif (isset($_POST['delete_user'])) {
-        // Delete user logic
-        $user_id = $_POST['user_id'];
-        
-        try {
-            $sql = "DELETE FROM users WHERE id = :id";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            $_SESSION['success'] = "User deleted successfully";
-        } catch (PDOException $e) {
-            $_SESSION['error'] = "Error deleting user: " . $e->getMessage();
+        if ($dev_uid == 0) {
+            throw new Exception("Select the User department!");
         }
+        if ($fingerid <= 0 || $fingerid >= 128) {
+            throw new Exception("The Fingerprint ID must be between 1 & 127");
+        }
+
+        // Check device exists
+        $stmt = $conn->prepare("SELECT device_dep, device_uid FROM devices WHERE id = :dev_id");
+        $stmt->bindParam(':dev_id', $dev_uid, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        if ($device = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $dev_name = $device['device_dep'];
+            $dev_uid = $device['device_uid'];
+
+            // Check if fingerprint ID already exists
+            $stmt = $conn->prepare("SELECT fingerprint_id FROM users WHERE fingerprint_id = :fingerid AND device_uid = :dev_uid");
+            $stmt->bindParam(':fingerid', $fingerid, PDO::PARAM_INT);
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            if ($stmt->fetch()) {
+                throw new Exception("This ID already exists! Delete it from the scanner");
+            }
+
+            // Check if there's already a fingerprint being added
+            $stmt = $conn->prepare("SELECT add_fingerid FROM users WHERE add_fingerid = 1 AND device_uid = :dev_uid");
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            if ($stmt->fetch()) {
+                throw new Exception("You can't add more than one ID each time");
+            }
+
+            // Reset all selections
+            $conn->beginTransaction();
+            
+            $stmt = $conn->prepare("UPDATE users SET fingerprint_select = 0 WHERE fingerprint_select = 1 AND device_uid = :dev_uid");
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            // Add new fingerprint
+            $stmt = $conn->prepare("INSERT INTO users (fingerprint_id, fingerprint_select, user_date, device_uid, device_dep, del_fingerid, add_fingerid) 
+                                   VALUES (:fingerid, 1, CURRENT_DATE, :dev_uid, :dev_name, 0, 1)");
+            $stmt->bindParam(':fingerid', $fingerid, PDO::PARAM_INT);
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->bindParam(':dev_name', $dev_name);
+            $stmt->execute();
+
+            $conn->commit();
+            echo "1";
+        } else {
+            throw new Exception("Invalid device selected");
+        }
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        echo $e->getMessage();
     }
-    
-    header("Location: ManageUsers.php");
     exit();
 }
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Manage Users</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/png" href="icons/atte1.jpg">
-    
-    <!-- CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="css/bootstrap.min.css">
-    <link rel="stylesheet" href="css/manage-users.css">
-    
-    <!-- JavaScript -->
-    <script src="js/jquery-3.6.0.min.js"></script>
-    <script src="js/bootstrap.bundle.min.js"></script>
-    <script src="js/manage-users.js"></script>
-</head>
-<body>
-<?php include 'header.php'; ?>
 
-<main>
-    <section class="container py-4">
-        <h1 class="slideInDown animated">Manage Users</h1>
-        
-        <!-- Display messages -->
-        <?php if (isset($_SESSION['error'])): ?>
-            <div class="alert alert-danger alert-dismissible fade show">
-                <?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?>
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-            </div>
-        <?php endif; ?>
-        
-        <?php if (isset($_SESSION['success'])): ?>
-            <div class="alert alert-success alert-dismissible fade show">
-                <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
-                <button type="button" class="close" data-dismiss="alert">&times;</button>
-            </div>
-        <?php endif; ?>
-        
-        <div class="row">
-            <!-- Add User Form -->
-            <div class="col-md-4 mb-4">
-                <div class="card shadow">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Add New User</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="addUserForm" method="POST">
-                            <div class="form-group">
-                                <label for="username">Full Name</label>
-                                <input type="text" class="form-control" id="username" name="username" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="serialnumber">Serial Number</label>
-                                <input type="text" class="form-control" id="serialnumber" name="serialnumber" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="gender">Gender</label>
-                                <select class="form-control" id="gender" name="gender" required>
-                                    <option value="Male">Male</option>
-                                    <option value="Female">Female</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="department">Department</label>
-                                <select class="form-control" id="department" name="department" required>
-                                    <?php
-                                    try {
-                                        $sql = "SELECT DISTINCT device_dep FROM devices";
-                                        $stmt = $conn->query($sql);
-                                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                                            echo '<option value="'.htmlspecialchars($row['device_dep']).'">'.htmlspecialchars($row['device_dep']).'</option>';
-                                        }
-                                    } catch (PDOException $e) {
-                                        echo '<option value="">Error loading departments</option>';
-                                    }
-                                    ?>
-                                </select>
-                            </div>
-                            <button type="submit" name="add_user" class="btn btn-primary btn-block">
-                                <i class="fas fa-user-plus"></i> Add User
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
+// Add user details
+if (isset($_POST['Add'])) {
+    try {
+        $Uname = trim($_POST['name']);
+        $Number = trim($_POST['number']);
+        $dev_uid = $_POST['dev_uid'];
+        $finger_id = (int)$_POST['finger_id'];
+        $Gender = $_POST['gender'] ?? null;
+
+        // Validate inputs
+        if (empty($Uname) || empty($Number)) {
+            throw new Exception("Empty Fields");
+        }
+        if (empty($Gender)) {
+            throw new Exception("Gender empty!");
+        }
+
+        // Check if fingerprint exists and is not already added
+        $stmt = $conn->prepare("SELECT username FROM users WHERE fingerprint_id = :finger_id AND device_uid = :dev_uid");
+        $stmt->bindParam(':finger_id', $finger_id, PDO::PARAM_INT);
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        if ($user = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            if ($user['username'] != "None") {
+                throw new Exception("This Fingerprint is already added");
+            }
+
+            // Check if serial number is unique
+            $stmt = $conn->prepare("SELECT serialnumber FROM users WHERE serialnumber = :number AND device_uid = :dev_uid");
+            $stmt->bindParam(':number', $Number);
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            if ($stmt->fetch()) {
+                throw new Exception("The serial number is already taken!");
+            }
+
+            // Update user details
+            $conn->beginTransaction();
             
-            <!-- Users List -->
-            <div class="col-md-8">
-                <div class="card shadow">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">Existing Users</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 500px;">
-                            <table class="table table-hover mb-0">
-                                <thead class="thead-light">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Serial Number</th>
-                                        <th>Gender</th>
-                                        <th>Department</th>
-                                        <th>Date Added</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    try {
-                                        $sql = "SELECT * FROM users ORDER BY id DESC";
-                                        $stmt = $conn->query($sql);
-                                        
-                                        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                                            echo '<tr>
-                                                <td>'.htmlspecialchars($row['id']).'</td>
-                                                <td>'.htmlspecialchars($row['username']).'</td>
-                                                <td>'.htmlspecialchars($row['serialnumber']).'</td>
-                                                <td>'.htmlspecialchars($row['gender']).'</td>
-                                                <td>'.htmlspecialchars($row['device_dep']).'</td>
-                                                <td>'.htmlspecialchars($row['user_date']).'</td>
-                                                <td>
-                                                    <form method="POST" style="display:inline;">
-                                                        <input type="hidden" name="user_id" value="'.htmlspecialchars($row['id']).'">
-                                                        <button type="submit" name="delete_user" class="btn btn-sm btn-danger" onclick="return confirm(\'Are you sure?\')">
-                                                            <i class="fas fa-trash-alt"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>';
-                                        }
-                                        
-                                        if ($stmt->rowCount() == 0) {
-                                            echo '<tr><td colspan="7" class="text-center">No users found</td></tr>';
-                                        }
-                                    } catch (PDOException $e) {
-                                        echo '<tr><td colspan="7" class="text-center text-danger">Error loading users: '.htmlspecialchars($e->getMessage()).'</td></tr>';
-                                    }
-                                    ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-</main>
+            $stmt = $conn->prepare("UPDATE users SET username = :uname, serialnumber = :number, gender = :gender, user_date = CURRENT_DATE 
+                                   WHERE fingerprint_select = 1 AND device_uid = :dev_uid");
+            $stmt->bindParam(':uname', $Uname);
+            $stmt->bindParam(':number', $Number);
+            $stmt->bindParam(':gender', $Gender);
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
 
-</body>
-</html>
+            // Reset selection
+            $stmt = $conn->prepare("UPDATE users SET fingerprint_select = 0 WHERE device_uid = :dev_uid");
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            $conn->commit();
+            echo "1";
+        } else {
+            throw new Exception("There's no selected Fingerprint!");
+        }
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        echo $e->getMessage();
+    }
+    exit();
+}
+
+// Update user
+if (isset($_POST['Update'])) {
+    try {
+        $Uname = trim($_POST['name']);
+        $Number = trim($_POST['number']);
+        $dev_uid = $_POST['dev_uid'];
+        $finger_id = (int)$_POST['finger_id'];
+        $Gender = $_POST['gender'] ?? null;
+
+        // Validate inputs
+        if (empty($Gender)) {
+            throw new Exception("Gender empty!");
+        }
+        if (empty($Uname) && empty($Number)) {
+            throw new Exception("Empty Fields");
+        }
+
+        // Check if user exists and is not pending addition
+        $stmt = $conn->prepare("SELECT add_fingerid FROM users WHERE fingerprint_select = 1 AND device_uid = :dev_uid");
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        if ($user = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            if ($user['add_fingerid'] == 1) {
+                throw new Exception("First, You need to add the User!");
+            }
+
+            // Check if serial number is unique (excluding current user)
+            $stmt = $conn->prepare("SELECT serialnumber FROM users WHERE serialnumber = :number AND fingerprint_select = 0");
+            $stmt->bindParam(':number', $Number);
+            $stmt->execute();
+
+            if ($stmt->fetch()) {
+                throw new Exception("The serial number is already taken!");
+            }
+
+            // Update user
+            $conn->beginTransaction();
+            
+            $stmt = $conn->prepare("UPDATE users SET username = :uname, serialnumber = :number, gender = :gender 
+                                   WHERE fingerprint_select = 1 AND device_uid = :dev_uid");
+            $stmt->bindParam(':uname', $Uname);
+            $stmt->bindParam(':number', $Number);
+            $stmt->bindParam(':gender', $Gender);
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            // Reset selection
+            $stmt = $conn->prepare("UPDATE users SET fingerprint_select = 0 WHERE device_uid = :dev_uid");
+            $stmt->bindParam(':dev_uid', $dev_uid);
+            $stmt->execute();
+
+            $conn->commit();
+            echo "1";
+        } else {
+            throw new Exception("There's no selected User to update!");
+        }
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        echo $e->getMessage();
+    }
+    exit();
+}
+
+// Select fingerprint
+if (isset($_GET['select'])) {
+    try {
+        $finger_id = (int)$_GET['finger_id'];
+        $dev_uid = $_GET['dev_uid'];
+
+        $conn->beginTransaction();
+        
+        // Reset all selections
+        $stmt = $conn->prepare("UPDATE users SET fingerprint_select = 0 WHERE device_uid = :dev_uid");
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        // Select the specified fingerprint
+        $stmt = $conn->prepare("UPDATE users SET fingerprint_select = 1 WHERE fingerprint_id = :finger_id AND device_uid = :dev_uid");
+        $stmt->bindParam(':finger_id', $finger_id, PDO::PARAM_INT);
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        // Get user data
+        $stmt = $conn->prepare("SELECT * FROM users WHERE fingerprint_id = :finger_id AND device_uid = :dev_uid");
+        $stmt->bindParam(':finger_id', $finger_id, PDO::PARAM_INT);
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $conn->commit();
+        
+        header('Content-Type: application/json');
+        echo json_encode($data);
+    } catch (Exception $e) {
+        if (isset($conn) && $conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit();
+}
+
+// Delete user
+if (isset($_POST['delete'])) {
+    try {
+        $finger_id = (int)$_POST['finger_id'];
+        $dev_uid = $_POST['dev_uid'];
+
+        if ($finger_id == 0) {
+            throw new Exception("There no selected user to remove");
+        }
+
+        $stmt = $conn->prepare("UPDATE users SET del_fingerid = 1 WHERE fingerprint_id = :finger_id AND device_uid = :dev_uid");
+        $stmt->bindParam(':finger_id', $finger_id, PDO::PARAM_INT);
+        $stmt->bindParam(':dev_uid', $dev_uid);
+        $stmt->execute();
+
+        echo "1";
+    } catch (Exception $e) {
+        echo $e->getMessage();
+    }
+    exit();
+}

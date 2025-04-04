@@ -1,67 +1,127 @@
 <?php
-session_start();
+//Connect to database (modified for PostgreSQL)
 require 'connectDB.php';
 
-// Check if admin is logged in
-if (!isset($_SESSION['Admin-name'])) {
-    header("location: login.php");
-    exit();
-}
+$output = '';
 
-// Set headers for Excel download
-header("Content-Type: application/vnd.ms-excel");
-header("Content-Disposition: attachment; filename=devices_export_".date('Y-m-d_H-i-s').".xls");
-header("Pragma: no-cache");
-header("Expires: 0");
+if(isset($_POST["To_Excel"])){
+  
+    $searchQuery = " ";
+    $Start_date = " ";
+    $End_date = " ";
+    $Start_time = " ";
+    $End_time = " ";
+    $Finger_sel = " ";
 
-try {
-    // Query to get all devices with additional details
-    $sql = "SELECT d.*, COUNT(a.id) as attendance_count 
-            FROM devices d
-            LEFT JOIN attendance a ON d.device_uid = a.device_uid
-            GROUP BY d.id
-            ORDER BY d.id DESC";
-    $stmt = $conn->query($sql);
-    
-    // Start Excel HTML table
-    echo '<table border="1">
-            <tr>
-                <th colspan="7" style="text-align:center; background-color:#f2f2f2; font-size:18px;">
-                    Devices Export - '.date('Y-m-d H:i:s').'
-                </th>
-            </tr>
-            <tr>
-                <th>ID</th>
-                <th>Device Name</th>
-                <th>Department</th>
-                <th>UID</th>
-                <th>Mode</th>
-                <th>Date Added</th>
-                <th>Usage Count</th>
-            </tr>';
-    
-    // Add data rows
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $mode = ($row['device_mode'] == 0) ? 'Enrollment' : 'Attendance';
-        
-        echo '<tr>
-                <td>'.$row['id'].'</td>
-                <td>'.htmlspecialchars($row['device_name']).'</td>
-                <td>'.htmlspecialchars($row['device_dep']).'</td>
-                <td>'.$row['device_uid'].'</td>
-                <td>'.$mode.'</td>
-                <td>'.$row['device_date'].'</td>
-                <td>'.$row['attendance_count'].'</td>
-              </tr>';
+    //Start date filter
+    if ($_POST['date_sel_start'] != 0) {
+        $Start_date = $_POST['date_sel_start'];
+        $_SESSION['searchQuery'] = "checkindate='".$Start_date."'";
     }
-    
-    echo '</table>';
-    
-} catch (PDOException $e) {
-    // Log error and redirect if export fails
-    error_log("Excel export failed: ".$e->getMessage());
-    $_SESSION['error'] = "Failed to generate Excel export: ".$e->getMessage();
-    header("location: devices.php");
-    exit();
+    else{
+        $Start_date = date("Y-m-d");
+        $_SESSION['searchQuery'] = "checkindate='".date("Y-m-d")."'";
+    }
+    //End date filter
+    if ($_POST['date_sel_end'] != 0) {
+        $End_date = $_POST['date_sel_end'];
+        $_SESSION['searchQuery'] = "checkindate BETWEEN '".$Start_date."' AND '".$End_date."'";
+    }
+    //Time-In filter
+    if ($_POST['time_sel'] == "Time_in") {
+      //Start time filter
+      if ($_POST['time_sel_start'] != 0 && $_POST['time_sel_end'] == 0) {
+          $Start_time = $_POST['time_sel_start'];
+          $_SESSION['searchQuery'] .= " AND timein='".$Start_time."'";
+      }
+      elseif ($_POST['time_sel_start'] != 0 && $_POST['time_sel_end'] != 0) {
+          $Start_time = $_POST['time_sel_start'];
+      }
+      //End time filter
+      if ($_POST['time_sel_end'] != 0) {
+          $End_time = $_POST['time_sel_end'];
+          $_SESSION['searchQuery'] .= " AND timein BETWEEN '".$Start_time."' AND '".$End_time."'";
+      }
+    }
+    //Time-out filter
+    if ($_POST['time_sel'] == "Time_out") {
+      //Start time filter
+      if ($_POST['time_sel_start'] != 0 && $_POST['time_sel_end'] == 0) {
+          $Start_time = $_POST['time_sel_start'];
+          $_SESSION['searchQuery'] .= " AND timeout='".$Start_time."'";
+      }
+      elseif ($_POST['time_sel_start'] != 0 && $_POST['time_sel_end'] != 0) {
+          $Start_time = $_POST['time_sel_start'];
+      }
+      //End time filter
+      if ($_POST['time_sel_end'] != 0) {
+          $End_time = $_POST['time_sel_end'];
+          $_SESSION['searchQuery'] .= " AND timeout BETWEEN '".$Start_time."' AND '".$End_time."'";
+      }
+    }
+    //Fingerprint filter
+    if ($_POST['fing_sel'] != 0) {
+        $Finger_sel = $_POST['fing_sel'];
+        $_SESSION['searchQuery'] .= " AND fingerprint_id='".$Finger_sel."'";
+    }
+    //Department filter
+    if ($_POST['dev_id'] != 0) {
+        $dev_id = $_POST['dev_id'];
+        $sql = "SELECT device_uid FROM devices WHERE id=$1";
+        $result = pg_prepare($conn, "get_device_uid", $sql);
+        if (!$result) {
+            echo "SQL_Error";
+            exit();
+        }
+        else {
+            $result = pg_execute($conn, "get_device_uid", array($dev_id));
+            if ($row = pg_fetch_assoc($result)) {
+                $dev_uid = $row['device_uid'];
+            }
+        }
+        $_SESSION['searchQuery'] .= " AND device_uid='".$dev_uid."'";
+    }
+
+    $sql = "SELECT * FROM users_logs WHERE ".$_SESSION['searchQuery']." ORDER BY id DESC";
+    $result = pg_query($conn, $sql);
+    if(pg_num_rows($result) > 0){
+      $output .= '
+                  <table class="table" bordered="1">  
+                    <TR>
+                      <TH>ID</TH>
+                      <TH>Name</TH>
+                      <TH>Serial Number</TH>
+                      <TH>Fingerprint ID</TH>
+                      <TH>Device ID</TH>
+                      <TH>Device Dep</TH>
+                      <TH>Date log</TH>
+                      <TH>Time In</TH>
+                      <TH>Time Out</TH>
+                    </TR>';
+        while($row = pg_fetch_assoc($result)) {
+            $output .= '
+                        <TR> 
+                            <TD> '.$row['id'].'</TD>
+                            <TD> '.$row['username'].'</TD>
+                            <TD> '.$row['serialnumber'].'</TD>
+                            <TD> '.$row['fingerprint_id'].'</TD>
+                            <TD> '.$row['device_uid'].'</TD>
+                            <TD> '.$row['device_dep'].'</TD>
+                            <TD> '.$row['checkindate'].'</TD>
+                            <TD> '.$row['timein'].'</TD>
+                            <TD> '.$row['timeout'].'</TD>
+                        </TR>';
+        }
+        $output .= '</table>';
+        header('Content-Type: application/xls');
+        header('Content-Disposition: attachment; filename=User_Log'.$Start_date.'.xls');
+        
+        echo $output;
+        exit();
+    }
+    else{
+      header( "location: UsersLog.php" );
+      exit();
+    }
 }
 ?>

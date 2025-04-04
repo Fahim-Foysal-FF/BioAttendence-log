@@ -1,62 +1,14 @@
 <?php
 session_start();
-
-// Redirect if already logged in
 if (isset($_SESSION['Admin-name'])) {
     header("Location: index.php");
     exit();
-}
-
-// Database connection
-require 'connectDB.php';
-
-// Handle login form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login'])) {
-    $email = trim($_POST['email']);
-    $password = $_POST['pwd'];
-
-    // Validate inputs
-    if (empty($email) || empty($password)) {
-        $error = "Please fill in all fields";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Invalid email format";
-    } else {
-        try {
-            // Prepare SQL statement
-            $sql = "SELECT * FROM admin WHERE admin_email = :email LIMIT 1";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':email', $email);
-            $stmt->execute();
-            
-            // Check if user exists
-            if ($stmt->rowCount() == 1) {
-                $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                // Verify password
-                if (password_verify($password, $admin['admin_pwd'])) {
-                    // Set session variables
-                    $_SESSION['Admin-name'] = $admin['admin_name'];
-                    $_SESSION['Admin-email'] = $admin['admin_email'];
-                    
-                    // Redirect to dashboard
-                    header("Location: index.php?login=success");
-                    exit();
-                } else {
-                    $error = "Invalid email or password";
-                }
-            } else {
-                $error = "Invalid email or password";
-            }
-        } catch (PDOException $e) {
-            $error = "Database error: " . $e->getMessage();
-        }
-    }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Login - Biometric Attendance</title>
+    <title>Log In - Biometric Attendance</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="icons/atte1.jpg">
@@ -65,103 +17,125 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login'])) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/login.css">
-    <link rel="stylesheet" href="css/Users.css">
-    
     
     <!-- JavaScript -->
-    <script src="js/jquery-3.6.0.min.js"></script>
-    <script src="js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      $(document).ready(function() {
+        // Window resize handling
+        $(window).on("load resize", function() {
+            var scrollWidth = $('.tbl-content').width() - $('.tbl-content table').width();
+            $('.tbl-header').css({'padding-right':scrollWidth});
+        }).resize();
+        
+        // Form toggle animation
+        $(document).on('click', '.message a', function(e) {
+            e.preventDefault();
+            $('form').animate({height: "toggle", opacity: "toggle"}, "slow");
+            $('h1').animate({height: "toggle", opacity: "toggle"}, "slow");
+        });
+        
+        // Initially hide the reset form and reset heading
+        $(".reset-form").hide();
+        $("#reset").hide();
+      });
+    </script>
 </head>
 <body>
-<div class="login-container">
-    <div class="login-card shadow-lg">
-        <div class="card-header text-center">
-            <img src="icons/atte1.jpg" alt="Logo" class="logo mb-3">
-            <h3>Admin Login</h3>
-        </div>
-        
-        <div class="card-body">
-            <?php if (isset($error)): ?>
-                <div class="alert alert-danger alert-dismissible fade show">
-                    <?php echo htmlspecialchars($error); ?>
-                    <button type="button" class="close" data-dismiss="alert">&times;</button>
-                </div>
-            <?php endif; ?>
-            
-            <?php if (isset($_GET['error'])): ?>
-                <div class="alert alert-warning alert-dismissible fade show">
-                    <?php 
-                    switch ($_GET['error']) {
-                        case 'emptyfields':
-                            echo "Please fill in all fields";
-                            break;
-                        case 'invalidEmail':
-                            echo "Invalid email format";
-                            break;
-                        case 'wrongpassword':
-                            echo "Incorrect password";
-                            break;
-                        case 'nouser':
-                            echo "No account found with this email";
-                            break;
-                        default:
-                            echo "Login error occurred";
+<?php include 'header.php'; ?>
+<main>
+    <h1 class="slideInDown animated">Please, Login with the Admin E-mail and Password</h1>
+    <h1 class="slideInDown animated" id="reset">Please, Enter your Email to send the reset password link</h1>
+    
+    <!-- Login Section -->
+    <section>
+        <div class="slideInDown animated">
+            <div class="login-page">
+                <div class="form">
+                    <!-- Error/Success Messages -->
+                    <?php  
+                    if (isset($_GET['error'])) {
+                        $messages = [
+                            "invalidEmail" => "This E-mail is invalid!",
+                            "sqlerror" => "There was a database error!",
+                            "wrongpassword" => "Wrong password!",
+                            "nouser" => "This E-mail does not exist!"
+                        ];
+                        
+                        if (isset($messages[$_GET['error']])) {
+                            echo '<div class="alert alert-danger alert-dismissible fade show">
+                                    '.htmlspecialchars($messages[$_GET['error']]).'
+                                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                                  </div>';
+                        }
+                    }
+                    
+                    if (isset($_GET['reset']) && $_GET['reset'] == "success") {
+                        echo '<div class="alert alert-success alert-dismissible fade show">
+                                Check your E-mail for the reset link!
+                                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                              </div>';
+                    }
+                    
+                    if (isset($_GET['account']) && $_GET['account'] == "activated") {
+                        echo '<div class="alert alert-success alert-dismissible fade show">
+                                Your account is activated. Please Login.
+                                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                              </div>';
+                    }
+                    
+                    if (isset($_GET['active']) && $_GET['active'] == "success") {
+                        echo '<div class="alert alert-success alert-dismissible fade show">
+                                The activation link has been sent!
+                                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                              </div>';
                     }
                     ?>
-                    <button type="button" class="close" data-dismiss="alert">&times;</button>
-                </div>
-            <?php endif; ?>
-            
-            <form action="login.php" method="POST" autocomplete="off">
-                <div class="form-group">
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                    
+                    <div class="alert1"></div>
+                    
+                    <!-- Reset Password Form -->
+                    <form class="reset-form" action="reset_pass.php" method="post">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                </div>
+                                <input type="email" class="form-control" name="email" placeholder="E-mail..." required>
+                            </div>
                         </div>
-                        <input type="email" class="form-control" name="email" placeholder="Email" required>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <div class="input-group">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                        <button type="submit" class="btn btn-primary btn-block" name="reset_pass">Reset Password</button>
+                        <p class="message">Remember your password? <a href="#">Log In</a></p>
+                    </form>
+                    
+                    <!-- Login Form -->
+                    <form class="login-form" action="ac_login.php" method="post">
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                </div>
+                                <input type="email" class="form-control" name="email" id="email" placeholder="E-mail..." required>
+                            </div>
                         </div>
-                        <input type="password" class="form-control" name="pwd" placeholder="Password" required>
-                    </div>
+                        <div class="form-group">
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                </div>
+                                <input type="password" class="form-control" name="pwd" id="pwd" placeholder="Password" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block" name="login" id="login">Login</button>
+                        <p class="message">Forgot your Password? <a href="#">Reset your password</a></p>
+                    </form>
                 </div>
-                
-                <div class="form-group form-check">
-                    <input type="checkbox" class="form-check-input" id="rememberMe" name="remember">
-                    <label class="form-check-label" for="rememberMe">Remember me</label>
-                </div>
-                
-                <button type="submit" name="login" class="btn btn-primary btn-block">
-                    <i class="fas fa-sign-in-alt"></i> Login
-                </button>
-                
-                <div class="text-center mt-3">
-                    <a href="forgot_password.php" class="text-muted">Forgot password?</a>
-                </div>
-            </form>
+            </div>
         </div>
-        
-        <div class="card-footer text-center text-muted">
-            <small>&copy; <?php echo date('Y'); ?> Biometric Attendance System</small>
-        </div>
-    </div>
-</div>
+    </section>
+</main>
 
-<script>
-// Focus on email field when page loads
-$(document).ready(function() {
-    $('input[name="email"]').focus();
-    
-    // Prevent form resubmission on refresh
-    if (window.history.replaceState) {
-        window.history.replaceState(null, null, window.location.href);
-    }
-});
-</script>
+<!-- Bootstrap JS -->
+<script src="js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

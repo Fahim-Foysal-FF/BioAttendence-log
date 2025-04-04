@@ -16,10 +16,10 @@ session_start();
         <tbody>
             <?php  
                 require 'connectDB.php';
-                
                 try {
                     $sql = "SELECT * FROM devices ORDER BY id DESC";
-                    $stmt = $conn->query($sql);
+                    $stmt = $conn->prepare($sql);
+                    $stmt->execute();
                     
                     echo '<form action="" method="POST" enctype="multipart/form-data">';
                     
@@ -35,15 +35,15 @@ session_start();
                         </div>';
 
                         echo '<tr>
-                            <td>'.htmlspecialchars($row["device_name"]).'</td>
-                            <td>'.htmlspecialchars($row["device_dep"]).'</td>
+                            <td>'.$row["device_name"].'</td>
+                            <td>'.$row["device_dep"].'</td>
                             <td>
                                 <button type="button" class="dev_uid_up btn btn-warning" id="del_'.$row["id"].'" data-id="'.$row["id"].'" title="Update this device Token">
                                     <span class="glyphicon glyphicon-refresh"></span>
                                 </button>
-                                '.htmlspecialchars($row["device_uid"]).'
+                                '.$row["device_uid"].'
                             </td>
-                            <td>'.htmlspecialchars($row["device_date"]).'</td>
+                            <td>'.$row["device_date"].'</td>
                             <td>'.$de_mode.'</td>
                             <td>
                                 <button type="button" class="dev_del btn btn-danger" id="del_'.$row["id"].'" data-id="'.$row["id"].'" title="Delete this device">
@@ -54,11 +54,11 @@ session_start();
                     }
                     
                     echo '</form>';
-                    
                 } catch (PDOException $e) {
-                    echo '<p class="error">Database Error: '.htmlspecialchars($e->getMessage()).'</p>';
+                    echo '<tr><td colspan="6" class="error">SQL Error: ' . htmlspecialchars($e->getMessage()) . '</td></tr>';
                 }
             ?>
         </tbody>
     </table>
 </div>
+<!-- <button type="button" class="dev_pro_up btn btn-info" id="del_'.$row["id"].'" data-id="'.$row["id"].'"  title="Change this device Project"><span class="glyphicon glyphicon-cog"> </span></button> -->
