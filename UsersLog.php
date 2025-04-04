@@ -17,86 +17,17 @@ if (!isset($_SESSION['Admin-name'])) {
     <link rel="icon" type="image/png" href="icons/atte1.jpg">
     
     <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="css/bootstrap.min.css">
     <link rel="stylesheet" href="css/userslog.css">
     
-    <!-- JavaScript -->
-    <script src="js/jquery-3.6.0.min.js"></script>
-    <script src="js/bootstrap.bundle.min.js"></script>
-    <script src="js/bootbox.min.js"></script>
+    <!-- JavaScript (jQuery FIRST) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/5.5.2/bootbox.min.js"></script>
     
-    <script>
-    $(document).ready(function() {
-        // Handle window resize
-        $(window).on("load resize", function() {
-            var scrollWidth = $('.tbl-content').width() - $('.tbl-content table').width();
-            $('.tbl-header').css({'padding-right':scrollWidth});
-        }).resize();
-
-        // Load initial logs
-        function loadLogs() {
-            $.ajax({
-                url: "user_log_up.php",
-                type: 'POST',
-                data: { 'load_initial': 1 }
-            }).done(function(data) {
-                $('#userslog').html(data);
-            }).fail(function(jqXHR, textStatus) {
-                console.error("Error loading logs: " + textStatus);
-            });
-        }
-
-        // Initial load
-        loadLogs();
-
-        // Auto-refresh every 10 seconds
-        setInterval(function() {
-            $.ajax({
-                url: "user_log_up.php",
-                type: 'POST',
-                data: { 'refresh': 1 }
-            }).done(function(data) {
-                $('#userslog').html(data);
-            });
-        }, 10000);
-
-        // Filter button click
-        $('#apply_filter').click(function(e) {
-            e.preventDefault();
-            
-            const formData = {
-                'filter_logs': 1,
-                'start_date': $('#date_sel_start').val(),
-                'end_date': $('#date_sel_end').val(),
-                'time_type': $('input[name="time_sel"]:checked').val(),
-                'start_time': $('#time_sel_start').val(),
-                'end_time': $('#time_sel_end').val(),
-                'finger_id': $('#fing_sel').val(),
-                'device_id': $('#dev_sel').val()
-            };
-
-            $.ajax({
-                url: "user_log_up.php",
-                type: 'POST',
-                data: formData,
-                dataType: 'html'
-            }).done(function(data) {
-                $('#userslog').html(data);
-                $('#Filter-export').modal('hide');
-            }).fail(function(jqXHR, textStatus) {
-                console.error("Error applying filters:", jqXHR.responseText);
-                bootbox.alert("Error applying filters: " + textStatus);
-            });
-        });
-
-        // Export button click
-        $('#export_excel').click(function(e) {
-            e.preventDefault();
-            $('#export-form').submit();
-        });
-    });
-    </script>
+    <!-- Your custom JS -->
+    <script src="js/user_log.js"></script>
 </head>
 <body>
 <?php include 'header.php'; ?>
