@@ -25,7 +25,6 @@ if (!isset($_SESSION['Admin-name'])) {
     <script src="js/jquery-3.6.0.min.js"></script>
     <script src="js/bootstrap.bundle.min.js"></script>
     <script src="js/bootbox.min.js"></script>
-    <script src="js/user_log.js"></script>
     
     <script>
     $(document).ready(function() {
@@ -36,11 +35,11 @@ if (!isset($_SESSION['Admin-name'])) {
         }).resize();
 
         // Load initial logs
-        function loadLogs(selectDate = 1) {
+        function loadLogs() {
             $.ajax({
                 url: "user_log_up.php",
                 type: 'POST',
-                data: { 'select_date': selectDate }
+                data: { 'load_initial': 1 }
             }).done(function(data) {
                 $('#userslog').html(data);
             }).fail(function(jqXHR, textStatus) {
@@ -49,42 +48,52 @@ if (!isset($_SESSION['Admin-name'])) {
         }
 
         // Initial load
-        loadLogs(1);
+        loadLogs();
 
-        // Auto-refresh every 5 seconds
+        // Auto-refresh every 10 seconds
         setInterval(function() {
-            loadLogs(0);
-        }, 5000);
+            $.ajax({
+                url: "user_log_up.php",
+                type: 'POST',
+                data: { 'refresh': 1 }
+            }).done(function(data) {
+                $('#userslog').html(data);
+            });
+        }, 10000);
 
         // Filter button click
-        $('#user_log').click(function() {
-            const startDate = $('#date_sel_start').val();
-            const endDate = $('#date_sel_end').val();
-            const timeType = $('input[name="time_sel"]:checked').val();
-            const startTime = $('#time_sel_start').val();
-            const endTime = $('#time_sel_end').val();
-            const fingerId = $('#fing_sel').val();
-            const deviceId = $('#dev_sel').val();
+        $('#apply_filter').click(function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                'filter_logs': 1,
+                'start_date': $('#date_sel_start').val(),
+                'end_date': $('#date_sel_end').val(),
+                'time_type': $('input[name="time_sel"]:checked').val(),
+                'start_time': $('#time_sel_start').val(),
+                'end_time': $('#time_sel_end').val(),
+                'finger_id': $('#fing_sel').val(),
+                'device_id': $('#dev_sel').val()
+            };
 
             $.ajax({
                 url: "user_log_up.php",
                 type: 'POST',
-                data: {
-                    'filter_logs': 1,
-                    'start_date': startDate,
-                    'end_date': endDate,
-                    'time_type': timeType,
-                    'start_time': startTime,
-                    'end_time': endTime,
-                    'finger_id': fingerId,
-                    'device_id': deviceId
-                }
+                data: formData,
+                dataType: 'html'
             }).done(function(data) {
                 $('#userslog').html(data);
                 $('#Filter-export').modal('hide');
             }).fail(function(jqXHR, textStatus) {
+                console.error("Error applying filters:", jqXHR.responseText);
                 bootbox.alert("Error applying filters: " + textStatus);
             });
+        });
+
+        // Export button click
+        $('#export_excel').click(function(e) {
+            e.preventDefault();
+            $('#export-form').submit();
         });
     });
     </script>
@@ -113,7 +122,7 @@ if (!isset($_SESSION['Admin-name'])) {
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
-                    <form method="POST" action="Export_Excel.php" enctype="multipart/form-data">
+                    <form method="POST" action="Export_Excel.php" enctype="multipart/form-data" id="export-form">
                         <div class="modal-body">
                             <div class="container-fluid">
                                 <div class="row mb-4">
@@ -125,11 +134,11 @@ if (!isset($_SESSION['Admin-name'])) {
                                             <div class="card-body">
                                                 <div class="form-group">
                                                     <label for="date_sel_start">Start Date</label>
-                                                    <input type="date" class="form-control" name="date_sel_start" id="date_sel_start">
+                                                    <input type="date" class="form-control" name="date_sel_start" id="date_sel_start" value="<?php echo date('Y-m-d'); ?>">
                                                 </div>
                                                 <div class="form-group">
                                                     <label for="date_sel_end">End Date</label>
-                                                    <input type="date" class="form-control" name="date_sel_end" id="date_sel_end">
+                                                    <input type="date" class="form-control" name="date_sel_end" id="date_sel_end" value="<?php echo date('Y-m-d'); ?>">
                                                 </div>
                                             </div>
                                         </div>
@@ -207,10 +216,10 @@ if (!isset($_SESSION['Admin-name'])) {
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                            <button type="submit" name="To_Excel" class="btn btn-success">
+                            <button type="button" id="export_excel" class="btn btn-success">
                                 <i class="fas fa-file-excel"></i> Export to Excel
                             </button>
-                            <button type="button" id="user_log" class="btn btn-primary">
+                            <button type="button" id="apply_filter" class="btn btn-primary">
                                 <i class="fas fa-filter"></i> Apply Filters
                             </button>
                         </div>
@@ -223,7 +232,7 @@ if (!isset($_SESSION['Admin-name'])) {
         <div class="card shadow slideInRight animated">
             <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">Attendance Records</h5>
-                <small class="float-right">Auto-refreshing every 5 seconds</small>
+                <small class="float-right">Auto-refreshing every 10 seconds</small>
             </div>
             <div class="card-body p-0">
                 <div id="userslog" class="table-responsive"></div>

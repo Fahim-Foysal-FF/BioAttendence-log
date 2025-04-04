@@ -6,86 +6,97 @@ require 'connectDB.php';
 date_default_timezone_set('UTC');
 
 // Initialize variables
-$searchQuery = "1=1"; // Default to show all records
+$searchQuery = "1=1";
 $params = [];
 
-// Process filter parameters
-if (isset($_POST['log_date']) || isset($_POST['select_date'])) {
+// Check if it's a refresh request
+if (isset($_POST['refresh'])) {
+    // Just get the latest logs without filtering
+    $searchQuery = "1=1 ORDER BY id DESC LIMIT 100";
+} 
+// Check if it's initial load
+elseif (isset($_POST['load_initial'])) {
+    // Get recent logs (last 100 records)
+    $searchQuery = "1=1 ORDER BY id DESC LIMIT 100";
+}
+// Check if it's a filter request
+elseif (isset($_POST['filter_logs'])) {
     // Date filters
-    $startDate = $_POST['date_sel_start'] ?? date("Y-m-d");
-    $endDate = $_POST['date_sel_end'] ?? $startDate;
+    $startDate = $_POST['start_date'] ?? '';
+    $endDate = $_POST['end_date'] ?? '';
     
     if (!empty($startDate) && !empty($endDate)) {
-        $searchQuery .= " AND checkindate BETWEEN :start_date AND :end_date";
-        $params[':start_date'] = $startDate;
-        $params[':end_date'] = $endDate;
+        if (strtotime($startDate) && strtotime($endDate)) {
+            $searchQuery .= " AND DATE(check_date) BETWEEN :start_date AND :end_date";
+            $params[':start_date'] = $startDate;
+            $params[':end_date'] = $endDate;
+        }
     }
 
     // Time filters
-    if (isset($_POST['time_sel'])) {
-        $timeField = ($_POST['time_sel'] == "Time_out") ? "timeout" : "timein";
-        $startTime = $_POST['time_sel_start'] ?? null;
-        $endTime = $_POST['time_sel_end'] ?? null;
+    if (isset($_POST['time_type'])) {
+        $timeField = ($_POST['time_type'] == "Time_out") ? "time_out" : "time_in";
+        $startTime = $_POST['start_time'] ?? '';
+        $endTime = $_POST['end_time'] ?? '';
 
-        if (!empty($startTime) && empty($endTime)) {
-            $searchQuery .= " AND $timeField = :start_time";
-            $params[':start_time'] = $startTime;
-        } elseif (!empty($startTime) && !empty($endTime)) {
-            $searchQuery .= " AND $timeField BETWEEN :start_time AND :end_time";
-            $params[':start_time'] = $startTime;
+        if (!empty($startTime)) {
+            if (!empty($endTime)) {
+                $searchQuery .= " AND TIME($timeField) BETWEEN :start_time AND :end_time";
+                $params[':start_time'] = $startTime;
+                $params[':end_time'] = $endTime;
+            } else {
+                $searchQuery .= " AND TIME($timeField) >= :start_time";
+                $params[':start_time'] = $startTime;
+            }
+        } elseif (!empty($endTime)) {
+            $searchQuery .= " AND TIME($timeField) <= :end_time";
             $params[':end_time'] = $endTime;
         }
     }
 
     // Fingerprint filter
-    if (!empty($_POST['fing_sel']) && $_POST['fing_sel'] != 0) {
-        $searchQuery .= " AND fingerprint_id = :finger_id";
-        $params[':finger_id'] = $_POST['fing_sel'];
+    $fingerId = $_POST['finger_id'] ?? 0;
+    if (!empty($fingerId) && $fingerId != 0) {
+        $searchQuery .= " AND ul.fingerprint_id = :finger_id";
+        $params[':finger_id'] = $fingerId;
     }
 
     // Department filter
-    if (!empty($_POST['dev_id']) && $_POST['dev_id'] != 0) {
-        try {
-            // Get device UID from department ID
-            $sql = "SELECT device_uid FROM devices WHERE id = :dev_id";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':dev_id', $_POST['dev_id'], PDO::PARAM_INT);
-            $stmt->execute();
-            
-            if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                $searchQuery .= " AND device_uid = :device_uid";
-                $params[':device_uid'] = $row['device_uid'];
-            }
-        } catch (PDOException $e) {
-            error_log("Department filter error: " . $e->getMessage());
-        }
+    $deviceDep = $_POST['device_id'] ?? 0;
+    if (!empty($deviceDep) && $deviceDep != 0) {
+        $searchQuery .= " AND ul.device_dep = :device_dep";
+        $params[':device_dep'] = $deviceDep;
     }
+
+    $searchQuery .= " ORDER BY ul.id DESC";
 }
 
-// Store search query in session
-$_SESSION['searchQuery'] = $searchQuery;
-$_SESSION['searchParams'] = $params;
-
-// Prepare and execute the query
 try {
-    $sql = "SELECT * FROM users_logs WHERE $searchQuery ORDER BY id DESC";
+    // Main query with JOIN to get user names
+    $sql = "SELECT ul.*, u.name AS username 
+            FROM users_logs ul
+            LEFT JOIN users u ON ul.fingerprint_id = u.fingerprint_id
+            WHERE $searchQuery";
+    
     $stmt = $conn->prepare($sql);
     
-    // Bind parameters
-    foreach ($params as $key => &$val) {
-        $stmt->bindParam($key, $val);
+    // Bind parameters with type checking
+    foreach ($params as $key => $value) {
+        $paramType = PDO::PARAM_STR;
+        if (is_int($value)) $paramType = PDO::PARAM_INT;
+        $stmt->bindValue($key, $value, $paramType);
     }
     
     $stmt->execute();
     
-    // Display results
-    echo '<div class="table-responsive" style="max-height: 500px;">';
-    echo '<table class="table table-striped">';
-    echo '<thead class="table-primary">';
+    // Output table
+    echo '<div class="table-responsive" style="max-height: 500px; overflow-y: auto;">';
+    echo '<table class="table table-striped table-hover">';
+    echo '<thead class="thead-dark">';
     echo '<tr>
             <th>ID</th>
             <th>Name</th>
-            <th>Serial Number</th>
+            <th>Card UID</th>
             <th>Fingerprint ID</th>
             <th>Department</th>
             <th>Date</th>
@@ -99,17 +110,17 @@ try {
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             echo '<tr>';
             echo '<td>'.htmlspecialchars($row['id']).'</td>';
-            echo '<td>'.htmlspecialchars($row['username']).'</td>';
-            echo '<td>'.htmlspecialchars($row['serialnumber']).'</td>';
+            echo '<td>'.htmlspecialchars($row['username'] ?? 'N/A').'</td>';
+            echo '<td>'.htmlspecialchars($row['card_uid'] ?? 'N/A').'</td>';
             echo '<td>'.htmlspecialchars($row['fingerprint_id']).'</td>';
             echo '<td>'.htmlspecialchars($row['device_dep']).'</td>';
-            echo '<td>'.htmlspecialchars($row['checkindate']).'</td>';
-            echo '<td>'.htmlspecialchars($row['timein']).'</td>';
-            echo '<td>'.htmlspecialchars($row['timeout']).'</td>';
+            echo '<td>'.htmlspecialchars($row['check_date']).'</td>';
+            echo '<td>'.htmlspecialchars($row['time_in'] ?? '').'</td>';
+            echo '<td>'.htmlspecialchars($row['time_out'] ?? '').'</td>';
             echo '</tr>';
         }
     } else {
-        echo '<tr><td colspan="8" class="text-center">No records found</td></tr>';
+        echo '<tr><td colspan="8" class="text-center text-muted py-3">No attendance records found</td></tr>';
     }
 
     echo '</tbody>';
@@ -117,7 +128,7 @@ try {
     echo '</div>';
 
 } catch (PDOException $e) {
-    echo '<div class="alert alert-danger">Database error: '.htmlspecialchars($e->getMessage()).'</div>';
-    error_log("Database error: " . $e->getMessage());
+    error_log("Database error in user_log_up.php: " . $e->getMessage());
+    echo '<div class="alert alert-danger">Error loading attendance data. Please try again.</div>';
 }
 ?>
