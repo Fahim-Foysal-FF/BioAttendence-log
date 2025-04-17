@@ -4,8 +4,12 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require 'connectDB.php';
 date_default_timezone_set('Asia/Damascus');
+// Use this for all time values
 $d = date("Y-m-d");
-$t = date("H:i:sa");
+$t = date("H:i:s"); // 24-hour format without AM/PM
+
+// For display purposes only (not database storage)
+$display_time = date("h:i:sa"); // 12-hour format with AM/PM
 
 try {
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
