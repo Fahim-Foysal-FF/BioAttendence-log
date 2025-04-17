@@ -4,12 +4,10 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require 'connectDB.php';
 date_default_timezone_set('Asia/Damascus');
-// Use this for all time values
-$d = date("Y-m-d");
-$t = date("H:i:s"); // 24-hour format without AM/PM
 
-// For display purposes only (not database storage)
-$display_time = date("h:i:sa"); // 12-hour format with AM/PM
+// Use consistent time format for database operations
+$current_date = date("Y-m-d");
+$current_time = date("H:i:s"); // 24-hour format for database storage
 
 try {
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -35,15 +33,18 @@ try {
                 if ($user = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     if ($user['username'] != "None" && $user['add_fingerid'] == 0) {
                         // Check for existing login today without logout
-                        $stmt = $conn->prepare("SELECT id FROM users_logs 
+                        $stmt = $conn->prepare("SELECT id, timein, timeout FROM users_logs 
                                                WHERE fingerprint_id = :fingerID 
                                                AND checkindate = :checkindate 
-                                               AND (timeout IS NULL OR timeout = '00:00:00')");
+                                               AND (timeout IS NULL OR timeout = '00:00:00')
+                                               ORDER BY id DESC LIMIT 1");
                         $stmt->bindParam(':fingerID', $fingerID);
-                        $stmt->bindParam(':checkindate', $d);
+                        $stmt->bindParam(':checkindate', $current_date);
                         $stmt->execute();
                         
-                        if ($stmt->rowCount() == 0) {
+                        $existing_log = $stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        if (!$existing_log) {
                             // Login - no record for today
                             $stmt = $conn->prepare("INSERT INTO users_logs 
                                                   (username, serialnumber, fingerprint_id, device_uid, device_dep, checkindate, timein, timeout) 
@@ -54,23 +55,25 @@ try {
                                 ':fingerID' => $fingerID,
                                 ':device_uid' => $device_uid,
                                 ':device_dep' => $device_dep,
-                                ':checkindate' => $d,
-                                ':timein' => $t
+                                ':checkindate' => $current_date,
+                                ':timein' => $current_time
                             ]);
                             echo "login".$user['username'];
                         } else {
                             // Logout - update existing record
-                            $stmt = $conn->prepare("UPDATE users_logs 
-                                                  SET timeout = :timeout, fingerout = 1 
-                                                  WHERE fingerprint_id = :fingerID 
-                                                  AND checkindate = :checkindate 
-                                                  AND fingerout = 0");
-                            $stmt->execute([
-                                ':timeout' => $t,
-                                ':fingerID' => $fingerID,
-                                ':checkindate' => $d
+                            $update = $conn->prepare("UPDATE users_logs 
+                                                    SET timeout = :timeout 
+                                                    WHERE id = :log_id");
+                            $update->execute([
+                                ':timeout' => $current_time,
+                                ':log_id' => $existing_log['id']
                             ]);
-                            echo "logout".$user['username'];
+                            
+                            if ($update->rowCount() > 0) {
+                                echo "logout".$user['username'];
+                            } else {
+                                echo "Error: Failed to update logout time";
+                            }
                         }
                     } else {
                         echo "Not registered!";
@@ -79,7 +82,8 @@ try {
                     echo "Not found!";
                 }
             } elseif ($device_mode == 0) { // Enrollment mode
-                $stmt = $conn->prepare("SELECT id FROM users WHERE fingerprint_id = :fingerID AND device_uid = :device_uid");$stmt->execute([
+                $stmt = $conn->prepare("SELECT id FROM users WHERE fingerprint_id = :fingerID AND device_uid = :device_uid");
+                $stmt->execute([
                     ':fingerID' => $fingerID,
                     ':device_uid' => $device_uid
                 ]);
@@ -164,7 +168,9 @@ try {
             echo "Error: ".$e->getMessage();
         }
         exit();
-    }if (isset($_GET['DeleteID']) && $_GET['DeleteID'] == "check" && isset($_GET['device_token'])) {
+    }
+
+    if (isset($_GET['DeleteID']) && $_GET['DeleteID'] == "check" && isset($_GET['device_token'])) {
         $device_uid = $_GET['device_token'];
         
         $stmt = $conn->prepare("SELECT fingerprint_id FROM users 
