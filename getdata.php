@@ -3,7 +3,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 require 'connectDB.php';
-date_default_timezone_set('Asia/Damascus');
+date_default_timezone_set('Asia/Dhaka');
 
 // Get current date and time in proper formats
 $current_date = date("Y-m-d");
